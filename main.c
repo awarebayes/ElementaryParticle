@@ -73,8 +73,8 @@ int main(int argc, char *argv[])
   char *tok[4];
 
   /* defaults */
-  size_t nthreads = 1;
-  size_t nslots = 1;
+  size_t nthreads = 4;
+  size_t nslots = 4;
   char *servedir = ".";
   char *user = "dev";
   char *group = "dev";

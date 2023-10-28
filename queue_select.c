@@ -91,7 +91,6 @@ int queue_add_fd(int qfd, int fd, enum queue_event_type type, int shared, const 
         return -1; // Maximum number of file descriptors reached for this queue
     }
 
-    pthread_mutex_lock(&num_queues_mutex);
 
     if (fd > max_fd[qfd])
     {
@@ -129,7 +128,6 @@ int queue_add_fd(int qfd, int fd, enum queue_event_type type, int shared, const 
         printf("Added fd %d to queue %d with data to %p to write \n", fd, qfd, fd_array[qfd][num_fds[qfd] - 1].data);
     }
 
-    pthread_mutex_unlock(&num_queues_mutex);
 
     return 0;
 }
@@ -277,7 +275,8 @@ ssize_t queue_wait(int qfd, queue_event *events, size_t event_len)
     {
         printf("No one is ready: %d\n", nready);
         fprintf(stderr, "%s\n", explain_select(maxfd, readfds, writefds, NULL, NULL));
-        return -1; // Error
+        remove_closed_fds(qfd);
+        return queue_wait(qfd, events, event_len);
     }
 
     ssize_t events_found = 0;
@@ -304,9 +303,20 @@ ssize_t queue_wait(int qfd, queue_event *events, size_t event_len)
     return events_found;
 }
 
+void remove_closed_fds(int q)
+{
+    for (int i = 0; i < num_fds[q]; i++)
+    {
+        int fd = fd_array[q][i].fd;
+        if (!isFdOpen(fd))
+        {
+            queue_rem_fd(q, fd);
+        }
+    }
+}
+
 void *queue_event_get_data(const queue_event *event)
 {
-    pthread_mutex_lock(&num_queues_mutex);
     printf("Getting event data for fd %d from queue %d\n", event->fd, event->queue_id);
     // print_fdarray(event->queue_id);
     int q = event->queue_id;
@@ -316,13 +326,11 @@ void *queue_event_get_data(const queue_event *event)
         {
             printf("Getting event data for fd %d got %p\n", event->fd, fd_array[q][i].data);
             void *data = fd_array[q][i].data;
-            pthread_mutex_unlock(&num_queues_mutex);
             return data;
         }
     }
 
-    pthread_mutex_unlock(&num_queues_mutex);
-    assert(0);
+    // assert(0);
 
     return NULL; // Data not found
 }
