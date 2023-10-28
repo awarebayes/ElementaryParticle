@@ -6,7 +6,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <fcntl.h>
-#include <libexplain/select.h>
 
 #define MAX_QUEUES 10
 #define MAX_FD_PER_QUEUE 1024
@@ -274,7 +273,6 @@ ssize_t queue_wait(int qfd, queue_event *events, size_t event_len)
     if (nready < 0)
     {
         printf("No one is ready: %d\n", nready);
-        fprintf(stderr, "%s\n", explain_select(maxfd, readfds, writefds, NULL, NULL));
         remove_closed_fds(qfd);
         return queue_wait(qfd, events, event_len);
     }
