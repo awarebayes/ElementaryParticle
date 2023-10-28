@@ -4,7 +4,7 @@
 
 include config.mk
 
-COMPONENTS = connection data http queue server sock util
+COMPONENTS = connection data http queue_impl server sock util
 
 all: quark
 
@@ -12,7 +12,7 @@ connection.o: connection.c config.h connection.h data.h http.h server.h sock.h u
 data.o: data.c config.h data.h http.h server.h util.h config.mk
 http.o: http.c config.h http.h server.h util.h config.mk
 main.o: main.c arg.h config.h server.h sock.h util.h config.mk
-server.o: server.c config.h connection.h http.h queue.h server.h util.h config.mk
+server.o: server.c config.h connection.h http.h queue.h server.h util.h queue_select.c queue.c config.mk
 sock.o: sock.c config.h sock.h util.h config.mk
 util.o: util.c config.h util.h config.mk
 
