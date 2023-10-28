@@ -188,6 +188,7 @@ int queue_rem_fd(int qfd, int fd)
 {
 #ifdef __linux__
 	struct epoll_event e;
+	printf("Removed fd: %d\n", fd);
 
 	if (epoll_ctl(qfd, EPOLL_CTL_DEL, fd, &e) < 0)
 	{

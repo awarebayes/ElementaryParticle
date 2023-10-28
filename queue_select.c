@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <stdio.h>
 #include <string.h>
+#include <fcntl.h>
+#include <libexplain/select.h>
 
 #define MAX_QUEUES 10
 #define MAX_FD_PER_QUEUE 1024
@@ -26,6 +28,21 @@ typedef struct
 static fd_info fd_array[MAX_QUEUES][MAX_FD_PER_QUEUE];
 
 static int num_queues = 0; // Number of queues created
+
+int isFdOpen(int fd)
+{
+    int flags = fcntl(fd, F_GETFL);
+    if (flags == -1)
+    {
+        // An error occurred; the file descriptor is likely closed.
+        return 0;
+    }
+    else
+    {
+        // No error; the file descriptor is open.
+        return 1;
+    }
+}
 
 void print_fdarray(int queue)
 {
@@ -131,9 +148,10 @@ int queue_mod_fd(int qfd, int fd, enum queue_event_type type, const void *data)
 
     if (type == QUEUE_EVENT_IN)
     {
-        if (!FD_ISSET(fd, &readfds[qfd]))
+        if (!FD_ISSET(fd, &writefds[qfd]))
         {
             FD_SET(fd, &readfds[qfd]);
+            FD_CLR(fd, &writefds[qfd]);
         }
         printf("Modified fd %d to queue %d with data to %p to read \n", fd, qfd, data);
     }
@@ -143,6 +161,7 @@ int queue_mod_fd(int qfd, int fd, enum queue_event_type type, const void *data)
         if (!FD_ISSET(fd, &writefds[qfd]))
         {
             FD_SET(fd, &writefds[qfd]);
+            FD_CLR(fd, &readfds[qfd]);
         }
         printf("Modified fd %d to queue %d with data to %p to write \n", fd, qfd, data);
     }
@@ -150,25 +169,17 @@ int queue_mod_fd(int qfd, int fd, enum queue_event_type type, const void *data)
     int exact_found = 0;
     for (int i = 0; i < num_fds[qfd]; i++)
     {
-        if (fd_array[qfd][i].fd == fd && fd_array[qfd][i].type == type)
+        if (fd_array[qfd][i].fd == fd)
         {
             // Update the data pointer associated with the file descriptor
             fd_array[qfd][i].data = (void *)data;
+            fd_array[qfd][i].type = type;
             exact_found = 1;
             break;
         }
     }
 
-    if (!exact_found)
-    {
-        fd_info info;
-        info.queue_id = qfd;
-        info.fd = fd;
-        info.type = type;
-        info.data = (void *)data;
-        fd_array[qfd][num_fds[qfd]] = info;
-        num_fds[qfd]++;
-    }
+    assert(isFdOpen(fd));
 
     printf("Modified\n");
     return 0;
@@ -176,6 +187,7 @@ int queue_mod_fd(int qfd, int fd, enum queue_event_type type, const void *data)
 
 int queue_rem_fd(int qfd, int fd)
 {
+    printf("Called to remove fd %d from queue %d\n", fd, qfd);
     if (qfd < 0 || qfd >= num_queues)
     {
         return -1; // Invalid queue index
@@ -263,8 +275,8 @@ ssize_t queue_wait(int qfd, queue_event *events, size_t event_len)
 
     if (nready < 0)
     {
-
         printf("No one is ready: %d\n", nready);
+        fprintf(stderr, "%s\n", explain_select(maxfd, readfds, writefds, NULL, NULL));
         return -1; // Error
     }
 
@@ -294,11 +306,9 @@ ssize_t queue_wait(int qfd, queue_event *events, size_t event_len)
 
 void *queue_event_get_data(const queue_event *event)
 {
-
     pthread_mutex_lock(&num_queues_mutex);
     printf("Getting event data for fd %d from queue %d\n", event->fd, event->queue_id);
-    print_fdarray(event->queue_id);
-    printf("Queue ended\n");
+    // print_fdarray(event->queue_id);
     int q = event->queue_id;
     for (int i = 0; i < num_fds[q]; i++)
     {
@@ -321,8 +331,13 @@ int queue_event_is_error(const queue_event *event)
 {
     // In this implementation, you can consider any event type not equal to IN or OUT as an error.
     // Adjust this logic as needed based on your specific error event handling.
-
     int is_error = (event->events != QUEUE_EVENT_IN && event->events != QUEUE_EVENT_OUT);
+
+    if (!isFdOpen(event->fd))
+    {
+        return is_error = 1;
+    }
+
     printf("Is error call: %d\n", is_error);
 
     return is_error;

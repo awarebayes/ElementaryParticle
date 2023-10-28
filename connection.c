@@ -62,6 +62,7 @@ void connection_reset(struct connection *c)
 	if (c != NULL)
 	{
 		shutdown(c->fd, SHUT_RDWR);
+		printf("closed fd: %d\n", c->fd);
 		close(c->fd);
 		memset(c, 0, sizeof(*c));
 	}
