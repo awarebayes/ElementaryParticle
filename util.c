@@ -1,5 +1,4 @@
-/* See LICENSE file for copyright and license details. */
-#include <errno.h>
+ #include <errno.h>
 #include <limits.h>
 #include <stdarg.h>
 #include <stdint.h>

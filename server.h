@@ -1,5 +1,4 @@
-/* See LICENSE file for copyright and license details. */
-#ifndef SERVER_H
+ #ifndef SERVER_H
 #define SERVER_H
 
 #include <regex.h>

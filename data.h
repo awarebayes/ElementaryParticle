@@ -1,5 +1,4 @@
-/* See LICENSE file for copyright and license details. */
-#ifndef DATA_H
+ #ifndef DATA_H
 #define DATA_H
 
 #include "http.h"

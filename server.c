@@ -1,4 +1,3 @@
-/* See LICENSE file for copyright and license details. */
 #include <errno.h>
 #include <pthread.h>
 #include <stddef.h>
@@ -117,7 +116,6 @@ server_worker(void *data)
 				if (c->fd == 0)
 				{
 					/* we are done */
-
 					queue_rem_fd(qfd, cfd);
 					memset(c, 0, sizeof(struct connection));
 					continue;

@@ -1,5 +1,4 @@
-/* See LICENSE file for copyright and license details. */
-#ifndef SOCK_H
+ #ifndef SOCK_H
 #define SOCK_H
 
 #include <stddef.h>

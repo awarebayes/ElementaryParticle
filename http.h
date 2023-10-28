@@ -1,5 +1,4 @@
-/* See LICENSE file for copyright and license details. */
-#ifndef HTTP_H
+ #ifndef HTTP_H
 #define HTTP_H
 
 #include <limits.h>

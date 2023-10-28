@@ -1,5 +1,4 @@
-/* See LICENSE file for copyright and license details. */
-#ifndef CONNECTION_H
+ #ifndef CONNECTION_H
 #define CONNECTION_H
 
 #include "http.h"

@@ -1,5 +1,4 @@
-/* See LICENSE file for copyright and license details. */
-#include <arpa/inet.h>
+ #include <arpa/inet.h>
 #include <ctype.h>
 #include <errno.h>
 #include <limits.h>
