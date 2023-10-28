@@ -61,6 +61,7 @@ int queue_create(void)
 
 int queue_add_fd(int qfd, int fd, enum queue_event_type type, int shared, const void *data)
 {
+
     if (qfd < 0 || qfd >= num_queues)
     {
         return -1; // Invalid queue index
@@ -70,6 +71,8 @@ int queue_add_fd(int qfd, int fd, enum queue_event_type type, int shared, const 
     {
         return -1; // Maximum number of file descriptors reached for this queue
     }
+
+    pthread_mutex_lock(&num_queues_mutex);
 
     if (fd > max_fd[qfd])
     {
@@ -99,13 +102,15 @@ int queue_add_fd(int qfd, int fd, enum queue_event_type type, int shared, const 
 
     if (type == QUEUE_EVENT_IN)
     {
-        printf("Added fd %d to queue %d with data to %p to read \n", fd, qfd, fd_array[qfd][num_fds[qfd - 1]].data);
+        printf("Added fd %d to queue %d with data to %p (%d) to read \n", fd, qfd, fd_array[qfd][num_fds[qfd] - 1].data, data);
     }
 
     if (type == QUEUE_EVENT_OUT)
     {
-        printf("Added fd %d to queue %d with data to %p to write \n", fd, qfd, fd_array[qfd][num_fds[qfd - 1]].data);
+        printf("Added fd %d to queue %d with data to %p to write \n", fd, qfd, fd_array[qfd][num_fds[qfd] - 1].data);
     }
+
+    pthread_mutex_unlock(&num_queues_mutex);
 
     return 0;
 }
@@ -124,15 +129,21 @@ int queue_mod_fd(int qfd, int fd, enum queue_event_type type, const void *data)
 
     if (type == QUEUE_EVENT_IN)
     {
-        printf("Modified fd %d to queue %d with data to %p to write \n", fd, qfd, data);
+        if (!FD_ISSET(fd, &readfds[qfd]))
+        {
+            FD_SET(fd, &readfds[qfd]);
+        }
+        printf("Modified fd %d to queue %d with data to %p to read \n", fd, qfd, data);
     }
 
     if (type == QUEUE_EVENT_OUT)
     {
-        printf("Modified fd %d to queue %d with data to %p to read \n", fd, qfd, data);
+        if (!FD_ISSET(fd, &writefds[qfd]))
+        {
+            FD_SET(fd, &writefds[qfd]);
+        }
+        printf("Modified fd %d to queue %d with data to %p to write \n", fd, qfd, data);
     }
-
-    printf("Modified fd %d to queue %d with data to %p to read \n", fd, qfd, data);
 
     for (int i = 0; i < num_fds[qfd]; i++)
     {
@@ -274,6 +285,8 @@ ssize_t queue_wait(int qfd, queue_event *events, size_t event_len)
 
 void *queue_event_get_data(const queue_event *event)
 {
+
+    pthread_mutex_lock(&num_queues_mutex);
     printf("Getting event data for fd %d from queue %d\n", event->fd, event->queue_id);
     // print_fdarray(event->queue_id);
     // printf("Queue ended\n");
@@ -283,9 +296,14 @@ void *queue_event_get_data(const queue_event *event)
         if (fd_array[q][i].fd == event->fd && fd_array[q][i].type == event->events)
         {
             printf("Getting event data for fd %d got %p\n", event->fd, fd_array[q][i].data);
-            return fd_array[q][i].data;
+            void *data = fd_array[q][i].data;
+            pthread_mutex_unlock(&num_queues_mutex);
+            return data;
         }
     }
+
+    pthread_mutex_unlock(&num_queues_mutex);
+    assert(0);
 
     return NULL; // Data not found
 }
@@ -295,7 +313,8 @@ int queue_event_is_error(const queue_event *event)
     // In this implementation, you can consider any event type not equal to IN or OUT as an error.
     // Adjust this logic as needed based on your specific error event handling.
 
-    printf("Is error call\n");
+    int is_error = (event->events != QUEUE_EVENT_IN && event->events != QUEUE_EVENT_OUT);
+    printf("Is error call: %d\n", is_error);
 
-    return (event->events != QUEUE_EVENT_IN && event->events != QUEUE_EVENT_OUT);
+    return is_error;
 }
