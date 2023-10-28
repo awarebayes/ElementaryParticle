@@ -3,6 +3,8 @@
 #include <pthread.h>
 #include <assert.h>
 #include <stdio.h>
+#include <stdio.h>
+#include <string.h>
 
 #define MAX_QUEUES 10
 #define MAX_FD_PER_QUEUE 1024
@@ -145,16 +147,30 @@ int queue_mod_fd(int qfd, int fd, enum queue_event_type type, const void *data)
         printf("Modified fd %d to queue %d with data to %p to write \n", fd, qfd, data);
     }
 
+    int exact_found = 0;
     for (int i = 0; i < num_fds[qfd]; i++)
     {
         if (fd_array[qfd][i].fd == fd && fd_array[qfd][i].type == type)
         {
             // Update the data pointer associated with the file descriptor
             fd_array[qfd][i].data = (void *)data;
-            return 0;
+            exact_found = 1;
+            break;
         }
     }
 
+    if (!exact_found)
+    {
+        fd_info info;
+        info.queue_id = qfd;
+        info.fd = fd;
+        info.type = type;
+        info.data = (void *)data;
+        fd_array[qfd][num_fds[qfd]] = info;
+        num_fds[qfd]++;
+    }
+
+    printf("Modified\n");
     return 0;
 }
 
@@ -185,21 +201,14 @@ int queue_rem_fd(int qfd, int fd)
     // You may also remove the associated data, but in this example, we keep it intact.
 
     // Shift the remaining file descriptors to maintain a compact array (optional).
-    /*
     for (int i = 0; i < num_fds[qfd]; i++)
     {
         if (fd_array[qfd][i].fd == fd)
         {
-            // Remove the file descriptor from the fd_array
-            for (int j = i; j < num_fds[qfd] - 1; j++)
-            {
-                fd_array[qfd][j] = fd_array[qfd][j + 1];
-            }
-            num_fds[qfd]--;
-            break;
+            memset(&fd_array[qfd][i], sizeof(fd_info), 0);
         }
     }
-    */
+
     printf("Removed fd %d from queue %d\n", fd, qfd);
     num_fds[qfd]--; // Watchme!
 
@@ -288,8 +297,8 @@ void *queue_event_get_data(const queue_event *event)
 
     pthread_mutex_lock(&num_queues_mutex);
     printf("Getting event data for fd %d from queue %d\n", event->fd, event->queue_id);
-    // print_fdarray(event->queue_id);
-    // printf("Queue ended\n");
+    print_fdarray(event->queue_id);
+    printf("Queue ended\n");
     int q = event->queue_id;
     for (int i = 0; i < num_fds[q]; i++)
     {
