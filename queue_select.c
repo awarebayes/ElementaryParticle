@@ -15,15 +15,24 @@ static pthread_mutex_t num_queues_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 typedef struct
 {
+    int queue_id;
     int fd;
     enum queue_event_type type;
     void *data;
 } fd_info;
 
-
 static fd_info fd_array[MAX_QUEUES][MAX_FD_PER_QUEUE];
 
 static int num_queues = 0; // Number of queues created
+
+void print_fdarray(int queue)
+{
+    for (int i = 0; i < 10; i++)
+    {
+        fd_info fdf = fd_array[queue][i];
+        printf("FDarray i %d - fd %d - type %d - data %p\n", i, fdf.fd, fdf.type, fdf.data);
+    }
+}
 
 int queue_create(void)
 {
@@ -80,6 +89,7 @@ int queue_add_fd(int qfd, int fd, enum queue_event_type type, int shared, const 
     // and its event type as needed for your application.
 
     fd_info info;
+    info.queue_id = qfd;
     info.fd = fd;
     info.type = type;
     info.data = (void *)data;
@@ -89,16 +99,13 @@ int queue_add_fd(int qfd, int fd, enum queue_event_type type, int shared, const 
 
     if (type == QUEUE_EVENT_IN)
     {
-        printf("Added fd %d to queue %d with data to %p to read \n", fd, qfd, data);
+        printf("Added fd %d to queue %d with data to %p to read \n", fd, qfd, fd_array[qfd][num_fds[qfd - 1]].data);
     }
 
     if (type == QUEUE_EVENT_OUT)
     {
-        printf("Added fd %d to queue %d with data to %p to write \n", fd, qfd, data);
+        printf("Added fd %d to queue %d with data to %p to write \n", fd, qfd, fd_array[qfd][num_fds[qfd - 1]].data);
     }
-
-
-    printf("Added fd %d to queue %d with data to %p with unknown type \n", fd, qfd, data);
 
     return 0;
 }
@@ -125,8 +132,7 @@ int queue_mod_fd(int qfd, int fd, enum queue_event_type type, const void *data)
         printf("Modified fd %d to queue %d with data to %p to read \n", fd, qfd, data);
     }
 
-
-    printf("Modified fd %d to queue %d with data to %p with unknown type \n", fd, qfd, data);
+    printf("Modified fd %d to queue %d with data to %p to read \n", fd, qfd, data);
 
     for (int i = 0; i < num_fds[qfd]; i++)
     {
@@ -163,9 +169,12 @@ int queue_rem_fd(int qfd, int fd)
         FD_CLR(fd, &writefds[qfd]);
     }
 
+    printf("Going to remove fd %d from queue %d\n", fd, qfd);
+
     // You may also remove the associated data, but in this example, we keep it intact.
 
     // Shift the remaining file descriptors to maintain a compact array (optional).
+    /*
     for (int i = 0; i < num_fds[qfd]; i++)
     {
         if (fd_array[qfd][i].fd == fd)
@@ -179,14 +188,29 @@ int queue_rem_fd(int qfd, int fd)
             break;
         }
     }
-
+    */
     printf("Removed fd %d from queue %d\n", fd, qfd);
+    num_fds[qfd]--; // Watchme!
 
     return 0;
 }
 
+void log_fd_set(const fd_set *set, int q)
+{
+    printf("File Descriptors in the Set for q %d: ", q);
+    for (int fd = 0; fd < FD_SETSIZE; fd++)
+    {
+        if (FD_ISSET(fd, set))
+        {
+            printf("%d ", fd);
+        }
+    }
+    printf("\n");
+}
+
 ssize_t queue_wait(int qfd, queue_event *events, size_t event_len)
 {
+    printf("wait\n");
     if (qfd < 0 || qfd >= num_queues)
     {
         return -1; // Invalid queue index
@@ -204,20 +228,23 @@ ssize_t queue_wait(int qfd, queue_event *events, size_t event_len)
     memcpy(&readfds_copy, &readfds[qfd], sizeof(fd_set));
     memcpy(&writefds_copy, &writefds[qfd], sizeof(fd_set));
 
-    struct timeval timeout;
-    timeout.tv_sec = 0; // No timeout
-    timeout.tv_usec = 0;
+    printf("Read:");
+    log_fd_set(&readfds_copy, qfd);
+    printf("Writ:");
+    log_fd_set(&writefds_copy, qfd);
 
     int maxfd = max_fd[qfd] + 1; // Maximum file descriptor
 
-    // printf("Waiting for max %d from queue %d\n", event_len, qfd);
+    printf("Waiting for max %d from queue %d maxfd %d\n", event_len, qfd, maxfd);
 
-    ssize_t nready = select(maxfd, &readfds_copy, &writefds_copy, NULL, &timeout);
+    ssize_t nready = select(maxfd, &readfds_copy, &writefds_copy, NULL, NULL);
 
     // printf("Got events %d from queue %d\n", nready, qfd);
 
     if (nready < 0)
     {
+
+        printf("No one is ready: %d\n", nready);
         return -1; // Error
     }
 
@@ -228,14 +255,16 @@ ssize_t queue_wait(int qfd, queue_event *events, size_t event_len)
         if (FD_ISSET(fd, &readfds_copy))
         {
             events[events_found].events = QUEUE_EVENT_IN;
-            events[events_found].fd = fd; // Populate the data structure
+            events[events_found].fd = fd;        // Populate the data structure
+            events[events_found].queue_id = qfd; // Populate the data structure
             events_found++;
         }
 
         if (FD_ISSET(fd, &writefds_copy))
         {
             events[events_found].events = QUEUE_EVENT_OUT;
-            events[events_found].fd = fd; // Populate the data structure
+            events[events_found].fd = fd;        // Populate the data structure
+            events[events_found].queue_id = qfd; // Populate the data structure
             events_found++;
         }
     }
@@ -245,17 +274,16 @@ ssize_t queue_wait(int qfd, queue_event *events, size_t event_len)
 
 void *queue_event_get_data(const queue_event *event)
 {
-    printf("Getting event data for fd %d\n", event->fd);
-    for (int q = 0; q < num_queues; q++)
+    printf("Getting event data for fd %d from queue %d\n", event->fd, event->queue_id);
+    // print_fdarray(event->queue_id);
+    // printf("Queue ended\n");
+    int q = event->queue_id;
+    for (int i = 0; i < num_fds[q]; i++)
     {
-        for (int i = 0; i < num_fds[q]; i++)
+        if (fd_array[q][i].fd == event->fd && fd_array[q][i].type == event->events)
         {
-            if (fd_array[q][i].fd == event->fd && fd_array[q][i].type == event->events)
-            {
-
-                printf("Getting event data for fd got %p\n", event->fd, fd_array[q][i].data);
-                return fd_array[q][i].data;
-            }
+            printf("Getting event data for fd %d got %p\n", event->fd, fd_array[q][i].data);
+            return fd_array[q][i].data;
         }
     }
 
@@ -266,6 +294,8 @@ int queue_event_is_error(const queue_event *event)
 {
     // In this implementation, you can consider any event type not equal to IN or OUT as an error.
     // Adjust this logic as needed based on your specific error event handling.
+
+    printf("Is error call\n");
 
     return (event->events != QUEUE_EVENT_IN && event->events != QUEUE_EVENT_OUT);
 }
